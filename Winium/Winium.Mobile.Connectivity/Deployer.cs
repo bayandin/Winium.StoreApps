@@ -98,6 +98,8 @@ namespace Winium.Mobile.Connectivity
         public void UsePreInstalledApplication(string appPath)
         {
             var appManifest = Utils.ReadAppManifestInfoFromPackage(appPath);
+            var apps = this.Device.GetInstalledApplications();
+            Logger.Debug(apps.ToString());
             this.RemoteApplication = this.Device.GetApplication(appManifest.ProductId);
         }
 

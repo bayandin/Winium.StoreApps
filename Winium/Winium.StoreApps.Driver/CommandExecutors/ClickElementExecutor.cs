@@ -30,6 +30,7 @@
             ClickElement(this.Automator, this.ExecutedCommand.Parameters["ID"].ToString());
 
             return this.JsonResponse();
+            
         }
 
         #endregion

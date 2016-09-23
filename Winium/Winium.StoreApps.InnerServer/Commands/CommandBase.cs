@@ -15,7 +15,7 @@
 
     #endregion
 
-    internal class CommandBase
+    internal abstract class CommandBase
     {
         #region Public Properties
 
@@ -57,10 +57,7 @@
 
         #region Methods
 
-        protected virtual string DoImpl()
-        {
-            throw new NotImplementedException();
-        }
+        protected abstract string DoImpl();
 
         protected string JsonResponse(ResponseStatus status = ResponseStatus.Success, object value = null)
         {

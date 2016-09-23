@@ -6,14 +6,15 @@
     using System.Collections.Generic;
     using System.Linq;
 
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Linq;
-
     using Windows.UI.Core;
     using Windows.UI.Xaml;
 
+    using Newtonsoft.Json;
+    using Newtonsoft.Json.Linq;
+
     using Winium.StoreApps.Common;
     using Winium.StoreApps.InnerServer.Commands;
+    using Winium.StoreApps.InnerServer.Web.Commands;
 
     #endregion
 
@@ -30,6 +31,8 @@
 
             this.UiThreadDispatcher = Window.Current.Dispatcher;
             this.ElementsRegistry = new ElementsRegistry();
+            this.ContextsRegistry = new ContextsRegistry();
+            this.CurrentContext = ContextsRegistry.NativeAppContext;
             this.DoAfterResponseOnce = null;
         }
 
@@ -43,6 +46,10 @@
 
         public ElementsRegistry ElementsRegistry { get; private set; }
 
+        public ContextsRegistry ContextsRegistry { get; private set; }
+
+        public string CurrentContext { get; set; }
+
         #endregion
 
         #region Public Methods and Operators
@@ -52,6 +59,7 @@
             var requestData = JsonConvert.DeserializeObject<Command>(content);
             var command = requestData.Name;
             var parameters = requestData.Parameters;
+            this.CurrentContext = requestData.Context;
 
             string elementId = null;
             if (parameters == null)
@@ -65,14 +73,64 @@
                 elementId = elementIdObject.ToString();
             }
 
-            CommandBase commandToExecute;
+            CommandBase commandToExecute = null;
 
             if (command.Equals("ping"))
             {
                 // Service command
                 return "<pong>";
             }
+            if (command.Equals(DriverCommand.Contexts))
+            {
+                commandToExecute = new GetWebContextsCommand();
+            }
+            else if (command.Equals(DriverCommand.SetContext))
+            {
+                commandToExecute = new SetContextCommand();
+            }
 
+            if (commandToExecute == null)
+            {
+                if (this.CurrentContext == ContextsRegistry.NativeAppContext)
+                {
+                    commandToExecute = GetNativeAppCommandToExecute(command, elementId, parameters);
+                }
+                else
+                {
+                    var webElement = this.ContextsRegistry.GetContext(this.CurrentContext);
+
+                    if (command.Equals(DriverCommand.GetPageSource))
+                    {
+
+                        commandToExecute = new GetPageSourceCommandHandler(webElement, requestData.Atom);
+                    }
+                    else
+                    {
+                        throw new NotImplementedException("Not implemented: " + command);
+                    }
+                }
+            }
+
+            JToken sessionIdObject;
+            commandToExecute.Session = parameters.TryGetValue("SESSIONID", out sessionIdObject)
+                                           ? sessionIdObject.ToString()
+                                           : string.Empty;
+
+            // TODO: Replace passing Automator to command with passing some kind of configuration
+            commandToExecute.Automator = this;
+            commandToExecute.Parameters = parameters;
+
+            var response = commandToExecute.Do();
+
+            return response;
+        }
+
+        private static CommandBase GetNativeAppCommandToExecute(
+            string command,
+            string elementId,
+            IDictionary<string, JToken> parameters)
+        {
+            CommandBase commandToExecute;
             // TODO: Refactor similar to CommandExecutors in OuterDriver
             if (command.Equals(DriverCommand.GetAlertText))
             {
@@ -165,24 +223,7 @@
             {
                 throw new NotImplementedException("Not implemented: " + command);
             }
-
-            JToken sessionIdObject;
-            if (parameters.TryGetValue("SESSIONID", out sessionIdObject))
-            {
-                commandToExecute.Session = sessionIdObject.ToString();
-            }
-            else
-            {
-                commandToExecute.Session = string.Empty;
-            }
-
-            // TODO: Replace passing Automator to command with passing some kind of configuration
-            commandToExecute.Automator = this;
-            commandToExecute.Parameters = parameters;
-
-            var response = commandToExecute.Do();
-
-            return response;
+            return commandToExecute;
         }
 
         #endregion
